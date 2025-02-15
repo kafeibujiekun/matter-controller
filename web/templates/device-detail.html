@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设备详情</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/device-detail.css">
+</head>
+<body class="detail-body">
+    <!-- 添加返回按钮 -->
+    <div class="back-nav">
+        <button class="back-button" onclick="window.location.href='/'">
+            <span class="back-icon">←</span>
+            <span class="back-text">返回</span>
+        </button>
+    </div>
+
+    <div class="detail-container">
+        <!-- 设备信息区块 -->
+        <section class="detail-card">
+            <div class="card-header">
+                <h2>设备信息</h2>
+            </div>
+            <div class="card-content">
+                <div class="device-basic-info">
+                    <div class="device-name" id="device-name">Zemismart bulb</div>
+                    <div class="device-manufacturer">制造商：<span id="manufacturer">Zemismart Technology Limited</span></div>
+                </div>
+                <div class="version-info">
+                    <div class="version-item">固件：<span id="firmware">1.10</span></div>
+                    <div class="version-item">硬件：<span id="hardware">1.0</span></div>
+                </div>
+                
+                <div class="device-details">
+                    <div class="info-item">
+                        <label>节点ID:</label>
+                        <span id="node-id">4</span>
+                    </div>
+                    <div class="info-item">
+                        <label>网络类型:</label>
+                        <span id="network-type">Wi-Fi</span>
+                    </div>
+                    <div class="info-item">
+                        <label>设备类型:</label>
+                        <span id="device-type">终端设备</span>
+                    </div>
+                    <div class="info-item">
+                        <label>网络名称:</label>
+                        <span id="network-name">HONOR-103W6W</span>
+                    </div>
+                    <div class="info-item">
+                        <label>MAC地址:</label>
+                        <span id="mac-address">38:01:8c:00:05:46</span>
+                    </div>
+                    <div class="info-item">
+                        <label>IP地址:</label>
+                        <span id="ip-address"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 控制区块 -->
+        <section class="detail-card">
+            <div class="card-header">
+                <h2>控制</h2>
+            </div>
+            <div class="card-content">
+                <div class="control-item">
+                    <div class="control-icon">💡</div>
+                    <div class="control-name">Zemismart bulb</div>
+                    <label class="switch">
+                        <input type="checkbox" id="device-switch">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="add-control">
+                    <a href="#" class="add-control-link">添加到仪表盘</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- 日志区块 -->
+        <section class="detail-card">
+            <div class="card-header">
+                <h2>日志</h2>
+            </div>
+            <div class="card-content">
+                <div class="log-container" id="device-logs">
+                    <p class="no-logs">未找到日志条目。</p>
+                </div>
+            </div>
+        </section>
+    </div>
+    <script src="/js/device-detail.js"></script>
+</body>
+</html> 

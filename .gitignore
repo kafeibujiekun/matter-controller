@@ -1,0 +1,35 @@
+# 编译生成的二进制文件
+matter-controller
+matter-controller.exe
+
+# 日志文件
+*.log
+logs/
+
+# Go 相关
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# IDE 相关
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 临时文件
+tmp/
+temp/
+
+# 依赖目录
+vendor/
+
+# 其他
+*.bak
+*.tmp 

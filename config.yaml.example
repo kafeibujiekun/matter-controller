@@ -1,0 +1,8 @@
+server:
+  port: 8080
+  host: "0.0.0.0"
+
+matter_server:
+  address: "ws://ip_address:5580/ws"
+  max_reconnect_attempts: 5
+  reconnect_delay: 3000  # 毫秒
