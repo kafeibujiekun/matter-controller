@@ -64,17 +64,19 @@ go run main.go
 
 ## 开发
 ### 项目结构
+```bash
 ├── main.go # 主程序入口
 ├── config.yaml # 配置文件
 ├── matter/
 │ └── client.go # Matter Server 客户端
 ├── web/
+│ ├── js/ # JavaScript 文件
 │ ├── static/ # 静态资源
-│ │ ├── css/ # 样式文件
-│ │ ├── js/ # JavaScript 文件
-│ │ └── pics/ # 图片资源
+│ │   ├── css/ # 样式文件
+│ │   └── pics/ # 图片资源
 │ └── templates/ # HTML 模板
 └── README.md
+```
 
 ### 构建
 ```bash
