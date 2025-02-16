@@ -6,6 +6,9 @@ matter-controller.exe
 *.log
 logs/
 
+# 配置文件
+config.yaml
+
 # Go 相关
 *.exe
 *.exe~

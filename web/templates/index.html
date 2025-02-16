@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home Assistant</title>
+    <title>Matter Controller</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
@@ -13,12 +13,12 @@
         <!-- 侧边栏 -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <img src="/static/pics/logo.png" alt="Home Assistant" class="header-logo">
+                <img src="/static/pics/logo.png" alt="Matter Controller" class="header-logo">
             </div>
             <div class="nav-section">
                 <ul class="nav-list">
                     <li class="nav-item active" data-page="overview">
-                        <span>概览</span>
+                        <span>设备</span>
                     </li>
                     <li class="nav-item" data-page="logs">
                         <span>日志</span>
@@ -34,13 +34,20 @@
                 <span class="status-indicator"></span>
                 <span class="status-text">Matter Server 连接中...</span>
             </div>
+            <!-- 添加 Matter Server 详细信息 -->
+            <div class="server-info">
+                <div>Fabric ID: --</div>
+                <div>Compressed Fabric ID: --</div>
+                <div>SDK Version: --</div>
+                <div>Schema Version: --</div>
+            </div>
         </div>
 
         <!-- 主内容区域 -->
         <div class="main-content">
             <!-- 顶部标题栏 -->
             <header class="top-bar">
-                <div class="page-title">概览</div>
+                <div class="page-title">设备</div>
                 <div class="header-actions">
                     <button class="add-device-btn" id="addDeviceBtn">
                         <span>添加设备</span>

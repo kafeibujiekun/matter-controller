@@ -6,7 +6,7 @@ let contentArea;
 // 页面配置
 const pages = {
     overview: {
-        title: '概览',
+        title: '设备',
         content: '<ul id="device-list" class="device-list"></ul>'
     },
     logs: {
@@ -50,7 +50,7 @@ function updatePage(pageId, data = {}) {
         headerActions.style.display = pageId === 'overview' ? 'flex' : 'none';
     }
 
-    // 如果是概览页面，初始化设备列表
+    // 如果是设备页面，初始化设备列表
     if (pageId === 'overview') {
         if (typeof initDeviceList === 'function') {
             initDeviceList();
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // 初始化显示概览页面
+    // 初始化显示设备页面
     updatePage('overview');
 });
 

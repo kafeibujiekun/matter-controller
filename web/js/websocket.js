@@ -7,34 +7,53 @@ function connect() {
     ws = new WebSocket('ws://' + window.location.host + '/ws');
     
     ws.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        console.log('收到消息:', data);
+        const message = JSON.parse(event.data);
+        console.log('收到消息:', message);
         
-        switch(data.type) {
+        switch(message.type) {
             case 'matter_server_status':
-                // 更新 Matter Server 状态
-                if (window.matterServerStatus) {
-                    window.matterServerStatus.updateStatus(data.data.status);
-                }
+                console.log('处理 Matter Server 状态更新:', message.data);
+                window.matterServerStatus.handleUpdate(message.data);
+                // window.matterServerInfo.handleUpdate(message.data);
+                break;
+            case 'matter_server_info':
+                console.log('处理 Matter Server 信息更新:', message.data);
+                window.matterServerInfo.handleUpdate(message.data);
                 break;
             case 'device_list':
-                updateDeviceList(data.data);
+                console.log('处理设备列表更新:', message.data);
+                updateDeviceList(message.data);
                 break;
             case 'device_detail':
-                updateDeviceDetail(data.data);
+                updateDeviceDetail(message.data);
                 break;
             case 'log':
-                appendLog(data.data);
+                appendLog(message.data);
                 break;
             case 'device_added':
                 // 处理设备添加成功的响应
                 alert('设备添加成功');
-                updateDeviceList(data.data);
+                updateDeviceList(message.data);
                 break;
             case 'device_add_failed':
                 // 处理设备添加失败的响应
-                alert('设备添加失败：' + data.data.error);
+                alert('设备添加失败：' + message.data.error);
                 break;
+            case 'commission_error':
+                alert(message.data.error);
+                break;
+            case 'commission_sent':
+                console.log(message.data.message);
+                break;
+            case 'device_event':
+                console.log('处理设备事件:', message.data);
+                window.deviceList.handleDeviceEvent(message.data);
+                break;
+            case 'error':
+                console.error('收到错误消息:', message.data);
+                break;
+            default:
+                console.warn('收到未知消息类型:', message.type, message);
         }
     };
 
@@ -168,23 +187,22 @@ function hideAddDeviceModal() {
 
 // 添加设备
 function addDevice() {
-    const networkCode = document.getElementById('network-code').value.trim();
-    
+    const networkCode = document.getElementById('network-code').value;
     if (!networkCode) {
         alert('请输入配网码');
         return;
     }
-    
-    // 通过WebSocket发送添加设备的请求
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-            type: 'add_device',
-            data: {
-                network_code: networkCode
-            }
-        }));
-    }
-    
+
+    console.log('发送配网请求，配网码:', networkCode); // 添加日志
+
+    // 发送配网请求
+    ws.send(JSON.stringify({
+        type: 'add_device',
+        data: {
+            code: networkCode
+        }
+    }));
+
     // 隐藏弹窗
     hideAddDeviceModal();
 }
@@ -206,6 +224,7 @@ document.addEventListener('keydown', function(e) {
 
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('页面加载完成，初始化 WebSocket 连接');
     // 初始化WebSocket连接
     connect();
 

@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -44,6 +45,40 @@ type Message struct {
 	Data interface{} `json:"data"`
 }
 
+// BroadcastMessage 广播消息结构
+type BroadcastMessage struct {
+	Type string      `json:"type"`
+	Data interface{} `json:"data"`
+}
+
+// ClientMessage 定义前端发送的消息结构
+type ClientMessage struct {
+	Type string      `json:"type"`
+	Data interface{} `json:"data"`
+}
+
+// AddDeviceData 定义添加设备消息的数据结构
+type AddDeviceData struct {
+	Code string `json:"code"`
+}
+
+// WebSocket upgrader
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // 允许所有跨域请求
+	},
+}
+
+var (
+	devices       = make(map[string]Device)
+	clients       = make(map[*websocket.Conn]bool)
+	clientsMu     sync.Mutex
+	logger        *log.Logger
+	matterClient  *matter.Client
+	matterStarted bool
+	cfg           *Config
+)
+
 // 加载配置文件
 func loadConfig(filename string) (*Config, error) {
 	buf, err := os.ReadFile(filename)
@@ -60,42 +95,29 @@ func loadConfig(filename string) (*Config, error) {
 	return cfg, nil
 }
 
-var (
-	devices   = make(map[string]Device)
-	clients   = make(map[*websocket.Conn]bool)
-	clientsMu sync.Mutex
-	broadcast = make(chan Message)
-	upgrader  = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true // 允许所有来源
-		},
-	}
-	logger        *log.Logger
-	matterClient  *matter.Client
-	matterStarted bool
-	cfg           *Config
-)
-
 // 初始化日志
 func initLogger() error {
-	// 创建logs目录
-	logsDir := "logs"
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
+	// 创建日志目录
+	if err := os.MkdirAll("logs", 0755); err != nil {
 		return fmt.Errorf("创建日志目录失败: %v", err)
 	}
 
-	// 创建日志文件（按日期）
-	logFile := filepath.Join(logsDir, time.Now().Format("2006-01-02")+".log")
-	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// 打开日志文件
+	logFile, err := os.OpenFile(
+		filepath.Join("logs", "app.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+		0644,
+	)
 	if err != nil {
-		return fmt.Errorf("创建日志文件失败: %v", err)
+		return fmt.Errorf("打开日志文件失败: %v", err)
 	}
 
-	// 设置日志输出到文件和控制台
-	multiWriter := io.MultiWriter(os.Stdout, file)
-	logger = log.New(multiWriter, "", log.Ldate|log.Ltime)
+	// 创建多输出
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
 
-	logger.Printf("日志系统初始化完成，日志文件: %s", logFile)
+	// 创建不同模块的日志记录器
+	logger = log.New(multiWriter, "[Main] ", log.LstdFlags)
+
 	return nil
 }
 
@@ -106,10 +128,9 @@ func startMatterServer() {
 		logger.Println("检测到首个客户端连接，启动 Matter Server 连接...")
 		matterClient = matter.NewClient(
 			cfg.MatterServer.Address,
-			logger,
+			log.New(logger.Writer(), "[Matter] ", log.LstdFlags),
 		)
 
-		// 设置重连参数
 		matterClient.SetReconnectParams(
 			cfg.MatterServer.MaxReconnectAttempts,
 			time.Duration(cfg.MatterServer.ReconnectDelay)*time.Millisecond,
@@ -121,12 +142,10 @@ func startMatterServer() {
 		// 处理 Matter Server 状态更新
 		go func() {
 			for status := range matterClient.StatusChan() {
-				broadcast <- Message{
+				broadcastToClients(BroadcastMessage{
 					Type: "matter_server_status",
-					Data: map[string]string{
-						"status": status,
-					},
-				}
+					Data: status,
+				})
 			}
 		}()
 
@@ -152,164 +171,151 @@ func stopMatterServer() {
 	clientsMu.Unlock()
 }
 
+// broadcastToClients 向所有连接的客户端发送消息
+func broadcastToClients(message BroadcastMessage) {
+	clientsMu.Lock()
+	clientCount := len(clients)
+	logger.Printf("开始广播消息到 %d 个客户端: %+v", clientCount, message)
+
+	for client := range clients {
+		err := client.WriteJSON(message)
+		if err != nil {
+			logger.Printf("发送消息到客户端 %s 失败: %v", client.RemoteAddr(), err)
+			client.Close()
+			delete(clients, client)
+		} else {
+			logger.Printf("成功发送消息到客户端 %s", client.RemoteAddr())
+		}
+	}
+	clientsMu.Unlock()
+}
+
+// handleWebSocket 处理 WebSocket 连接
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		logger.Printf("升级WebSocket失败: %v", err)
+		logger.Printf("升级 WebSocket 连接失败: %v", err)
 		return
 	}
-	defer conn.Close()
 
-	// 记录客户端连接信息
-	clientAddr := conn.RemoteAddr().String()
-	logger.Printf("新客户端连接: %s", clientAddr)
-
+	// 添加到 clients map
 	clientsMu.Lock()
 	clients[conn] = true
 	clientCount := len(clients)
 	clientsMu.Unlock()
 
-	// 如果是第一个客户端，启动 Matter Server
-	if clientCount == 1 {
-		startMatterServer()
+	logger.Printf("新的 WebSocket 连接: %s, 当前连接数: %d", conn.RemoteAddr(), clientCount)
+
+	// 发送当前状态
+	status := matterClient.GetCurrentStatus()
+	logger.Printf("向客户端 %s 发送当前状态: %+v", conn.RemoteAddr(), status)
+	err = conn.WriteJSON(BroadcastMessage{
+		Type: status.GetType(),
+		Data: status,
+	})
+	if err != nil {
+		logger.Printf("发送状态失败: %v", err)
+		conn.Close()
+		return
 	}
 
-	// 发送当前设备列表
-	deviceList := Message{
-		Type: "device_list",
-		Data: devices,
-	}
-	clientsMu.Lock()
-	if err := conn.WriteJSON(deviceList); err != nil {
-		logger.Printf("发送设备列表失败: %v", err)
-	}
-	clientsMu.Unlock()
-
-	// 发送当前 Matter Server 状态
-	if matterStarted {
-		status := matterClient.GetStatus()
-		conn.WriteJSON(Message{
-			Type: "matter_server_status",
-			Data: map[string]string{
-				"status": status,
-			},
+	// 如果有服务器信息，发送服务器信息
+	if info, exists := matterClient.GetCurrentInfo(); exists {
+		logger.Printf("向客户端 %s 发送服务器信息: %+v", conn.RemoteAddr(), info)
+		err = conn.WriteJSON(BroadcastMessage{
+			Type: info.GetType(),
+			Data: info,
 		})
+		if err != nil {
+			logger.Printf("发送服务器信息失败: %v", err)
+			conn.Close()
+			return
+		}
+	} else {
+		logger.Printf("客户端 %s: 当前没有服务器信息", conn.RemoteAddr())
 	}
 
-	// 处理客户端消息
+	// 清理连接
+	defer func() {
+		clientsMu.Lock()
+		delete(clients, conn)
+		remainingClients := len(clients)
+		clientsMu.Unlock()
+		conn.Close()
+		logger.Printf("客户端 %s 断开连接, 剩余连接数: %d", conn.RemoteAddr(), remainingClients)
+	}()
+
+	// 保持连接并处理接收到的消息
 	for {
-		var msg Message
-		err := conn.ReadJSON(&msg)
+		_, message, err := conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				logger.Printf("WebSocket错误 [%s]: %v", clientAddr, err)
-			} else {
-				logger.Printf("客户端断开连接: %s", clientAddr)
-			}
-
-			clientsMu.Lock()
-			delete(clients, conn)
-			clientCount := len(clients)
-			clientsMu.Unlock()
-
-			// 如果没有客户端连接了，停止 Matter Server
-			if clientCount == 0 {
-				stopMatterServer()
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				logger.Printf("读取客户端 %s 消息错误: %v", conn.RemoteAddr(), err)
 			}
 			break
 		}
 
-		logger.Printf("收到消息 [%s] - 类型: %s, 内容: %+v", clientAddr, msg.Type, msg.Data)
+		// 打印接收到的消息
+		logger.Printf("收到客户端 %s 消息内容: %s", conn.RemoteAddr(), string(message))
 
-		switch msg.Type {
+		// 解析消息
+		var clientMsg ClientMessage
+		if err := json.Unmarshal(message, &clientMsg); err != nil {
+			logger.Printf("解析客户端消息失败: %v", err)
+			continue
+		}
+
+		logger.Printf("解析的消息: 类型=%s, 数据=%+v", clientMsg.Type, clientMsg.Data)
+
+		// 处理不同类型的消息
+		switch clientMsg.Type {
 		case "add_device":
-			if deviceData, ok := msg.Data.(map[string]interface{}); ok {
-				if networkCode, ok := deviceData["network_code"].(string); ok {
-					// 生成随机设备ID
-					deviceID := fmt.Sprintf("device_%d", time.Now().Unix())
+			// 将 interface{} 转换为 map
+			dataMap, ok := clientMsg.Data.(map[string]interface{})
+			if !ok {
+				logger.Printf("无效的 add_device 数据格式")
+				continue
+			}
 
-					// 创建新设备
-					newDevice := Device{
-						ID:     deviceID,
-						Name:   fmt.Sprintf("设备_%s", networkCode),
-						Status: "online",
-					}
+			// 获取配网码
+			code, ok := dataMap["code"].(string)
+			if !ok {
+				logger.Printf("无效的配网码格式")
+				continue
+			}
 
-					// 添加设备到设备列表
-					clientsMu.Lock()
-					devices[deviceID] = newDevice
-					clientsMu.Unlock()
+			logger.Printf("收到配网请求，配网码: %s", code)
 
-					// 广播设备更新消息
-					broadcast <- Message{
-						Type: "device_added",
-						Data: devices,
-					}
-
-					logger.Printf("添加新设备成功: %+v", newDevice)
-				} else {
-					// 发送添加失败消息
-					conn.WriteJSON(Message{
-						Type: "device_add_failed",
-						Data: map[string]string{
-							"error": "无效的配网码格式",
-						},
-					})
-					logger.Printf("添加设备失败: 无效的配网码格式")
-				}
-			} else {
-				// 发送添加失败消息
-				conn.WriteJSON(Message{
-					Type: "device_add_failed",
+			// 发送配网请求
+			err := matterClient.SendCommissionRequest(code)
+			if err != nil {
+				logger.Printf("发送配网请求失败: %v", err)
+				// 可以在这里向前端发送错误消息
+				conn.WriteJSON(BroadcastMessage{
+					Type: "error",
 					Data: map[string]string{
-						"error": "无效的消息格式",
+						"message": "配网请求失败: " + err.Error(),
 					},
 				})
-				logger.Printf("添加设备失败: 无效的消息格式")
+			} else {
+				logger.Printf("配网请求已发送")
 			}
-		case "get_device_detail":
-			if deviceData, ok := msg.Data.(map[string]interface{}); ok {
-				if deviceID, ok := deviceData["device_id"].(string); ok {
-					clientsMu.Lock()
-					if device, exists := devices[deviceID]; exists {
-						conn.WriteJSON(Message{
-							Type: "device_detail",
-							Data: device,
-						})
-						logger.Printf("发送设备详情: %+v", device)
-					} else {
-						conn.WriteJSON(Message{
-							Type: "device_detail_error",
-							Data: map[string]string{
-								"error": "设备不存在",
-							},
-						})
-						logger.Printf("设备详情请求失败: 设备不存在 (ID: %s)", deviceID)
-					}
-					clientsMu.Unlock()
-				}
-			}
+
+		default:
+			logger.Printf("未知的消息类型: %s", clientMsg.Type)
 		}
 	}
 }
 
-func handleBroadcast() {
-	for msg := range broadcast {
-		clientsMu.Lock()
-		logger.Printf("广播消息 - 类型: %s, 内容: %+v", msg.Type, msg.Data)
-
-		for client := range clients {
-			err := client.WriteJSON(msg)
-			if err != nil {
-				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-					logger.Printf("广播消息错误: %v", err)
-				}
-				client.Close()
-				delete(clients, client)
-			}
-		}
-		clientsMu.Unlock()
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	// 只处理根路径的请求
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
 	}
+
+	logger.Printf("处理首页请求: %s", r.URL.Path)
+	http.ServeFile(w, r, "web/templates/index.html")
 }
 
 func main() {
@@ -325,32 +331,33 @@ func main() {
 		log.Fatalf("初始化日志系统失败: %v", err)
 	}
 
-	// 启动广播处理
-	go handleBroadcast()
+	// 初始化 Matter Client
+	matterClient = matter.NewClient(cfg.MatterServer.Address, logger)
+
+	// 启动 Matter Client
+	matterClient.Start()
+
+	// 设置路由
+	mux := http.NewServeMux()
+
+	// 首页路由
+	mux.HandleFunc("/", handleIndex)
+
+	// WebSocket 路由
+	mux.HandleFunc("/ws", handleWebSocket)
 
 	// 静态文件服务
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
-	http.Handle("/js/", http.FileServer(http.Dir("web")))
+	// 处理 /static/ 路径下的所有静态资源（css、pics）
+	staticFS := http.FileServer(http.Dir("web"))
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
-	// 路由处理
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/":
-			// 主页
-			http.ServeFile(w, r, "web/templates/index.html")
-		case "/device-detail.html":
-			// 设备详情页
-			http.ServeFile(w, r, "web/templates/device-detail.html")
-		default:
-			// 404 处理
-			http.NotFound(w, r)
-		}
-	})
+	// 处理 JavaScript 文件
+	mux.Handle("/js/", staticFS)
 
-	// WebSocket 处理
-	http.HandleFunc("/ws", handleWebSocket)
-
+	// 启动服务器
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	logger.Printf("服务器启动在 http://%s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		logger.Fatal("ListenAndServe: ", err)
+	}
 }

@@ -883,26 +883,23 @@ html, body {
     background: #999;
 }
 
-/* Matter Server 状态样式 */
-.nav-server-status {
-    padding: 15px 20px;
+/* Matter Server 状态显示样式 */
+.server-status {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    border-top: 1px solid #e0e0e0;
-    margin-top: auto;
+    align-items: flex-start;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    min-height: 120px;  /* 添加最小高度 */
 }
 
 .status-indicator {
-    width: 8px;
-    height: 8px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    display: inline-block;
-}
-
-.status-text {
-    font-size: 14px;
-    color: #666;
+    margin-right: 10px;
+    margin-top: 4px;
+    flex-shrink: 0;  /* 防止状态指示器被压缩 */
 }
 
 .status-connected {
@@ -914,7 +911,74 @@ html, body {
 }
 
 .status-connecting {
-    background-color: #FFA726;
+    background-color: #FFC107;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    50% { opacity: 0.5; }
+}
+
+.status-text {
+    flex-grow: 1;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow: visible;  /* 确保内容可见 */
+    display: flex;
+    flex-direction: column;  /* 垂直排列 */
+    gap: 4px;  /* 行间距 */
+}
+
+.status-text div {
+    padding: 2px 0;
+    color: #333;
+    white-space: nowrap;  /* 防止文本换行 */
+}
+
+.status-text div:first-child {
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.server-info {
+    margin-top: 8px;
+    padding-left: 22px;  /* 与状态指示器对齐 */
+    font-size: 14px;
+    color: #666;
+}
+
+.server-info div {
+    margin: 2px 0;
+}
+
+/* Matter Server 状态样式 */
+.nav-server-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-indicator.status-connected {
+    background-color: #4CAF50;  /* 绿色 */
+    box-shadow: 0 0 8px #4CAF50;
+}
+
+.status-indicator.status-disconnected {
+    background-color: #F44336;  /* 红色 */
+    box-shadow: 0 0 8px #F44336;
+}
+
+.status-indicator.status-connecting {
+    background-color: #FFC107;  /* 黄色 */
+    box-shadow: 0 0 8px #FFC107;
     animation: blink 1s infinite;
 }
 
@@ -922,4 +986,16 @@ html, body {
     0% { opacity: 0.4; }
     50% { opacity: 1; }
     100% { opacity: 0.4; }
+}
+
+/* 服务器信息样式 */
+.server-info {
+    margin-top: 8px;
+    padding-left: 28px;  /* 与状态指示器对齐 */
+    font-size: 14px;
+    color: #666;
+}
+
+.server-info div {
+    margin: 4px 0;
 } 
